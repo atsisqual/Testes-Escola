@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/atsisqual/Testes-Escola/blob/main/quiz.schema.json",
+  "title": "Testes-Escola Quiz",
+  "type": "object",
+  "required": ["title", "settings", "questions"],
+  "additionalProperties": false,
+  "properties": {
+    "title": {"type": "string", "minLength": 1},
+    "description": {"type": "string"},
+    "sourceTitle": {"type": "string"},
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scoreScaleMax", "passPercent", "shuffleQuestions", "shuffleOptions"],
+      "properties": {
+        "scoreScaleMax": {"type": "number", "exclusiveMinimum": 0, "default": 100},
+        "passPercent": {"type": "number", "minimum": 0, "maximum": 100, "default": 50},
+        "shuffleQuestions": {"type": "boolean", "default": false},
+        "shuffleOptions": {"type": "boolean", "default": false}
+      }
+    },
+    "questions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "type", "prompt", "options", "correctOptionId", "points", "explanation"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "type": {"const": "single_choice"},
+          "prompt": {"type": "string", "minLength": 1},
+          "options": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id", "text"],
+              "properties": {
+                "id": {"type": "string", "minLength": 1},
+                "text": {"type": "string", "minLength": 1}
+              }
+            }
+          },
+          "correctOptionId": {"type": "string", "minLength": 1},
+          "points": {"type": "number", "exclusiveMinimum": 0},
+          "explanation": {"type": "string", "minLength": 1},
+          "sourceRef": {"type": "string"}
+        }
+      }
+    }
+  }
+}
