@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Testes-Escola</title>
+  <style>
+    :root { color-scheme: light dark; font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { margin: 0; background: Canvas; color: CanvasText; }
+    main { width: min(900px, calc(100% - 32px)); margin: 32px auto 64px; }
+    h1, h2, h3 { line-height: 1.2; }
+    .muted { opacity: .72; }
+    .panel { border: 1px solid color-mix(in srgb, CanvasText 18%, transparent); border-radius: 16px; padding: 20px; margin: 18px 0; background: color-mix(in srgb, Canvas 96%, CanvasText 4%); }
+    textarea { box-sizing: border-box; width: 100%; min-height: 170px; resize: vertical; padding: 12px; border-radius: 10px; border: 1px solid color-mix(in srgb, CanvasText 25%, transparent); font: 14px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    input[type=file] { max-width: 100%; }
+    button { font: inherit; padding: 10px 16px; border-radius: 10px; border: 1px solid color-mix(in srgb, CanvasText 25%, transparent); cursor: pointer; }
+    button.primary { font-weight: 700; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+    .question { margin: 18px 0; padding: 18px; border: 1px solid color-mix(in srgb, CanvasText 16%, transparent); border-radius: 14px; }
+    .question legend { font-weight: 700; padding: 0 5px; }
+    .option { display: flex; gap: 10px; align-items: flex-start; margin: 10px 0; padding: 10px; border-radius: 10px; }
+    .option:hover { background: color-mix(in srgb, CanvasText 7%, transparent); }
+    .points { font-size: .9rem; opacity: .7; margin-left: 6px; }
+    .error { border-color: #b42318; }
+    .notice { padding: 12px 14px; border-radius: 10px; margin: 12px 0; }
+    .notice.error { background: color-mix(in srgb, #b42318 13%, Canvas); color: CanvasText; }
+    .notice.ok { background: color-mix(in srgb, #087a3e 13%, Canvas); color: CanvasText; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); gap: 10px; margin: 16px 0; }
+    .stat { border: 1px solid color-mix(in srgb, CanvasText 15%, transparent); border-radius: 12px; padding: 14px; }
+    .stat strong { display: block; font-size: 1.45rem; }
+    .wrong { border-left: 5px solid #b42318; padding-left: 16px; }
+    .answer-line { margin: 7px 0; }
+    [hidden] { display: none !important; }
+    footer { margin-top: 36px; font-size: .9rem; opacity: .7; }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Testes-Escola</h1>
+    <p class="muted">Motor de questionários de escolha múltipla com pontuação e correção automática.</p>
+  </header>
+
+  <section id="loader" class="panel">
+    <h2>Carregar teste</h2>
+    <p>Escolhe um ficheiro JSON produzido segundo o motor ou cola o conteúdo abaixo.</p>
+    <input id="fileInput" type="file" accept="application/json,.json">
+    <p><strong>ou</strong></p>
+    <textarea id="jsonInput" spellcheck="false" placeholder='Cola aqui o JSON do teste...'></textarea>
+    <div class="actions">
+      <button id="startBtn" class="primary" type="button">Iniciar teste</button>
+    </div>
+    <div id="loadMessage" aria-live="polite"></div>
+  </section>
+
+  <section id="quizSection" hidden>
+    <div class="panel">
+      <h2 id="quizTitle"></h2>
+      <p id="quizDescription" class="muted"></p>
+      <p id="quizMeta" class="muted"></p>
+    </div>
+    <form id="quizForm"></form>
+    <div class="actions">
+      <button id="submitBtn" class="primary" type="button">Terminar e corrigir</button>
+      <button id="restartBtn" type="button">Reiniciar</button>
+    </div>
+  </section>
+
+  <section id="resultSection" class="panel" hidden aria-live="polite">
+    <h2>Resultado</h2>
+    <div id="resultSummary"></div>
+    <div id="wrongAnswers"></div>
+  </section>
+
+  <footer>Sem servidor e sem dependências externas. O teste é processado localmente no navegador.</footer>
+</main>
+
+<script>
+(() => {
+  'use strict';
+
+  const els = {
+    loader: document.getElementById('loader'),
+    fileInput: document.getElementById('fileInput'),
+    jsonInput: document.getElementById('jsonInput'),
+    startBtn: document.getElementById('startBtn'),
+    loadMessage: document.getElementById('loadMessage'),
+    quizSection: document.getElementById('quizSection'),
+    quizTitle: document.getElementById('quizTitle'),
+    quizDescription: document.getElementById('quizDescription'),
+    quizMeta: document.getElementById('quizMeta'),
+    quizForm: document.getElementById('quizForm'),
+    submitBtn: document.getElementById('submitBtn'),
+    restartBtn: document.getElementById('restartBtn'),
+    resultSection: document.getElementById('resultSection'),
+    resultSummary: document.getElementById('resultSummary'),
+    wrongAnswers: document.getElementById('wrongAnswers')
+  };
+
+  let quiz = null;
+  let renderedQuestions = [];
+
+  function shuffle(items) {
+    const copy = [...items];
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+    return copy;
+  }
+
+  function showLoadMessage(text, kind = 'error') {
+    els.loadMessage.textContent = '';
+    if (!text) return;
+    const box = document.createElement('div');
+    box.className = `notice ${kind}`;
+    box.textContent = text;
+    els.loadMessage.appendChild(box);
+  }
+
+  function validateQuiz(data) {
+    const errors = [];
+    if (!data || typeof data !== 'object' || Array.isArray(data)) errors.push('O JSON tem de conter um objeto de teste.');
+    if (!data?.title || typeof data.title !== 'string') errors.push('Falta um título válido.');
+    if (!data?.settings || typeof data.settings !== 'object') errors.push('Falta o objeto settings.');
+    if (!Array.isArray(data?.questions) || data.questions.length === 0) errors.push('O teste tem de ter pelo menos uma pergunta.');
+
+    const questionIds = new Set();
+    for (const [index, q] of (data?.questions || []).entries()) {
+      const n = index + 1;
+      if (!q?.id || typeof q.id !== 'string') errors.push(`Pergunta ${n}: id inválido.`);
+      else if (questionIds.has(q.id)) errors.push(`Pergunta ${n}: id repetido (${q.id}).`);
+      else questionIds.add(q.id);
+
+      if (q?.type !== 'single_choice') errors.push(`Pergunta ${n}: só é suportado o tipo single_choice.`);
+      if (!q?.prompt || typeof q.prompt !== 'string') errors.push(`Pergunta ${n}: enunciado inválido.`);
+      if (!(Number(q?.points) > 0)) errors.push(`Pergunta ${n}: points tem de ser superior a zero.`);
+      if (!Array.isArray(q?.options) || q.options.length < 2) {
+        errors.push(`Pergunta ${n}: são necessárias pelo menos duas opções.`);
+        continue;
+      }
+      const optionIds = new Set();
+      for (const option of q.options) {
+        if (!option?.id || typeof option.id !== 'string' || !option?.text || typeof option.text !== 'string') {
+          errors.push(`Pergunta ${n}: existe uma opção inválida.`);
+          continue;
+        }
+        if (optionIds.has(option.id)) errors.push(`Pergunta ${n}: opção repetida (${option.id}).`);
+        optionIds.add(option.id);
+      }
+      if (!optionIds.has(q.correctOptionId)) errors.push(`Pergunta ${n}: correctOptionId não corresponde a nenhuma opção.`);
+      if (!q?.explanation || typeof q.explanation !== 'string') errors.push(`Pergunta ${n}: falta a explicação.`);
+    }
+    return errors;
+  }
+
+  function readSelectedFile() {
+    return new Promise((resolve, reject) => {
+      const file = els.fileInput.files?.[0];
+      if (!file) return resolve(null);
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(new Error('Não foi possível ler o ficheiro.'));
+      reader.readAsText(file, 'utf-8');
+    });
+  }
+
+  function optionById(question, id) {
+    return question.options.find(o => o.id === id);
+  }
+
+  function renderQuiz(data) {
+    quiz = data;
+    renderedQuestions = data.settings.shuffleQuestions ? shuffle(data.questions) : [...data.questions];
+
+    els.quizTitle.textContent = data.title;
+    els.quizDescription.textContent = data.description || '';
+    els.quizDescription.hidden = !data.description;
+
+    const totalPoints = data.questions.reduce((sum, q) => sum + Number(q.points), 0);
+    els.quizMeta.textContent = `${data.questions.length} perguntas · ${totalPoints} pontos${data.sourceTitle ? ` · Fonte: ${data.sourceTitle}` : ''}`;
+
+    els.quizForm.textContent = '';
+    renderedQuestions.forEach((q, index) => {
+      const fieldset = document.createElement('fieldset');
+      fieldset.className = 'question';
+
+      const legend = document.createElement('legend');
+      legend.append(`${index + 1}. ${q.prompt}`);
+      const points = document.createElement('span');
+      points.className = 'points';
+      points.textContent = `(${q.points} ${Number(q.points) === 1 ? 'ponto' : 'pontos'})`;
+      legend.appendChild(points);
+      fieldset.appendChild(legend);
+
+      const options = data.settings.shuffleOptions ? shuffle(q.options) : [...q.options];
+      options.forEach(option => {
+        const label = document.createElement('label');
+        label.className = 'option';
+
+        const input = document.createElement('input');
+        input.type = 'radio';
+        input.name = q.id;
+        input.value = option.id;
+
+        const text = document.createElement('span');
+        text.textContent = `${option.id}. ${option.text}`;
+
+        label.append(input, text);
+        fieldset.appendChild(label);
+      });
+
+      els.quizForm.appendChild(fieldset);
+    });
+
+    els.loader.hidden = true;
+    els.quizSection.hidden = false;
+    els.resultSection.hidden = true;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  async function startQuiz() {
+    showLoadMessage('');
+    try {
+      const fromFile = await readSelectedFile();
+      const raw = (fromFile ?? els.jsonInput.value).trim();
+      if (!raw) throw new Error('Escolhe um ficheiro JSON ou cola um teste na caixa de texto.');
+      const data = JSON.parse(raw);
+      const errors = validateQuiz(data);
+      if (errors.length) throw new Error(errors.join(' '));
+      renderQuiz(data);
+    } catch (error) {
+      showLoadMessage(error instanceof SyntaxError ? 'O conteúdo não é JSON válido.' : error.message);
+    }
+  }
+
+  function addStat(container, value, label) {
+    const box = document.createElement('div');
+    box.className = 'stat';
+    const strong = document.createElement('strong');
+    strong.textContent = value;
+    const text = document.createElement('span');
+    text.textContent = label;
+    box.append(strong, text);
+    container.appendChild(box);
+  }
+
+  function addAnswerLine(container, label, value) {
+    const row = document.createElement('p');
+    row.className = 'answer-line';
+    const strong = document.createElement('strong');
+    strong.textContent = `${label}: `;
+    row.append(strong, document.createTextNode(value));
+    container.appendChild(row);
+  }
+
+  function gradeQuiz() {
+    if (!quiz) return;
+
+    const formData = new FormData(els.quizForm);
+    let earned = 0;
+    let max = 0;
+    let correct = 0;
+    let wrong = 0;
+    let unanswered = 0;
+    const misses = [];
+
+    renderedQuestions.forEach((q, index) => {
+      const selected = formData.get(q.id);
+      const isCorrect = selected === q.correctOptionId;
+      max += Number(q.points);
+
+      if (isCorrect) {
+        earned += Number(q.points);
+        correct++;
+      } else {
+        if (selected === null) unanswered++;
+        else wrong++;
+        misses.push({ q, index, selected });
+      }
+    });
+
+    const percent = max > 0 ? earned / max * 100 : 0;
+    const passPercent = Number(quiz.settings.passPercent ?? 50);
+    const scaleMax = Number(quiz.settings.scoreScaleMax ?? 100);
+    const scaled = percent / 100 * scaleMax;
+
+    els.resultSummary.textContent = '';
+    const status = document.createElement('div');
+    status.className = `notice ${percent >= passPercent ? 'ok' : 'error'}`;
+    status.textContent = percent >= passPercent ? 'Resultado: aprovado segundo o limite definido no teste.' : 'Resultado: abaixo do limite definido no teste.';
+    els.resultSummary.appendChild(status);
+
+    const stats = document.createElement('div');
+    stats.className = 'stats';
+    addStat(stats, `${earned}/${max}`, 'Pontos');
+    addStat(stats, `${percent.toFixed(1)}%`, 'Percentagem');
+    if (scaleMax !== 100) addStat(stats, `${scaled.toFixed(1)}/${scaleMax}`, 'Nota na escala');
+    addStat(stats, String(correct), 'Corretas');
+    addStat(stats, String(wrong), 'Erradas');
+    addStat(stats, String(unanswered), 'Sem resposta');
+    els.resultSummary.appendChild(stats);
+
+    els.wrongAnswers.textContent = '';
+    const heading = document.createElement('h3');
+    heading.textContent = misses.length ? 'Respostas a rever' : 'Tudo correto';
+    els.wrongAnswers.appendChild(heading);
+
+    if (!misses.length) {
+      const p = document.createElement('p');
+      p.textContent = 'Não há respostas erradas nem perguntas por responder.';
+      els.wrongAnswers.appendChild(p);
+    }
+
+    misses.forEach(({ q, index, selected }) => {
+      const card = document.createElement('article');
+      card.className = 'question wrong';
+      const title = document.createElement('h3');
+      title.textContent = `${index + 1}. ${q.prompt}`;
+      card.appendChild(title);
+
+      const userOption = selected === null ? null : optionById(q, String(selected));
+      const correctOption = optionById(q, q.correctOptionId);
+      addAnswerLine(card, 'A tua resposta', userOption ? `${userOption.id}. ${userOption.text}` : 'Sem resposta');
+      addAnswerLine(card, 'Resposta correta', correctOption ? `${correctOption.id}. ${correctOption.text}` : q.correctOptionId);
+      addAnswerLine(card, 'Explicação', q.explanation);
+      if (q.sourceRef) addAnswerLine(card, 'Referência', q.sourceRef);
+
+      els.wrongAnswers.appendChild(card);
+    });
+
+    for (const input of els.quizForm.querySelectorAll('input')) input.disabled = true;
+    els.submitBtn.disabled = true;
+    els.resultSection.hidden = false;
+    els.resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function restart() {
+    quiz = null;
+    renderedQuestions = [];
+    els.quizForm.textContent = '';
+    els.quizSection.hidden = true;
+    els.resultSection.hidden = true;
+    els.submitBtn.disabled = false;
+    els.loader.hidden = false;
+    showLoadMessage('');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  els.startBtn.addEventListener('click', startQuiz);
+  els.submitBtn.addEventListener('click', gradeQuiz);
+  els.restartBtn.addEventListener('click', restart);
+  els.fileInput.addEventListener('change', async () => {
+    try {
+      const text = await readSelectedFile();
+      if (text !== null) els.jsonInput.value = text;
+      showLoadMessage('Ficheiro carregado. Clica em “Iniciar teste”.', 'ok');
+    } catch (error) {
+      showLoadMessage(error.message);
+    }
+  });
+})();
+</script>
+</body>
+</html>
