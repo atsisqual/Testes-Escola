@@ -1,6 +1,6 @@
 # SKILL — Testes-Escola
 
-Versão: 1.0
+Versão: 1.1
 
 ## Finalidade
 
@@ -64,7 +64,7 @@ Quando a matéria permitir, misturar:
 
 ## Modo de entrega
 
-Existem dois modos válidos.
+Existem três modos válidos.
 
 ### 1. Modo conversa
 
@@ -75,13 +75,38 @@ Usar quando o utilizador quer fazer o teste diretamente no ChatGPT.
 - Não corrigir parcialmente durante o teste, a menos que o utilizador peça esse modo.
 - No fim, corrigir tudo e apresentar o resultado.
 
-### 2. Modo formulário
+### 2. Modo formulário local
 
-Usar quando o utilizador quer um questionário reutilizável tipo Google Forms.
+Usar quando o utilizador quer um questionário reutilizável sem depender de serviços externos.
 
 - Produzir um JSON válido segundo `quiz.schema.json`.
 - O JSON pode ser carregado em `web/index.html`.
 - Não incluir HTML específico da matéria; a matéria deve ficar apenas no JSON do teste.
+
+### 3. Modo Google Forms
+
+Usar quando o utilizador pedir Google Forms, Forms, formulário Google, ou disser que quer o teste criado diretamente num formulário online.
+
+Neste modo, a responsabilidade é do agente/assistente que está a executar esta skill:
+
+- criar diretamente um Google Form na conta Google do utilizador;
+- configurar o formulário como questionário/quiz;
+- criar as perguntas e respetivas opções;
+- marcar a resposta correta de cada pergunta;
+- atribuir a pontuação definida no teste;
+- adicionar feedback de correção quando a plataforma o permitir;
+- preservar título, descrição e referências úteis à matéria;
+- devolver ao utilizador o formulário criado, preferencialmente com ligação de edição e/ou ligação para responder, conforme o que estiver disponível.
+
+Regras operacionais deste modo:
+
+1. Não pedir ao utilizador para copiar scripts, JSON, perguntas ou respostas manualmente para o Google Forms.
+2. Não exigir que exista código específico de Google Forms dentro deste repositório para executar a criação.
+3. Usar, em tempo de execução, uma integração, conector, navegador autenticado ou outra capacidade de escrita disponível para atuar no Google Forms.
+4. Se ainda não existir uma sessão/autorização Google válida, pedir apenas a autenticação ou permissão necessária nesse momento e continuar depois com a criação.
+5. Credenciais, palavras-passe, tokens, cookies, chaves ou sessões autenticadas nunca devem ser guardados neste repositório.
+6. A skill pode declarar que necessita de capacidade de escrita em Google Forms, mas a autorização efetiva pertence à sessão/conta do utilizador e é obtida fora do GitHub.
+7. O conteúdo específico de cada teste não deve ser persistido no repositório apenas para criar o Google Form, salvo pedido explícito do utilizador.
 
 ## Correção
 
